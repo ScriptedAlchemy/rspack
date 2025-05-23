@@ -255,7 +255,7 @@ pub(crate) mod test {
       "/rspack/custom-loader-1/index.js"
     }
     fn query(&self) -> Option<&str> {
-      Some("?foo=1")
+      Some("foo=1")
     }
   }
   impl Identifiable for Custom {
@@ -274,7 +274,7 @@ pub(crate) mod test {
       "/rspack/custom-loader-2/index.js"
     }
     fn query(&self) -> Option<&str> {
-      Some("?bar=2")
+      Some("bar=2")
     }
   }
   impl Identifiable for Custom2 {
@@ -309,7 +309,7 @@ pub(crate) mod test {
       "/a/b/c.js"
     }
     fn query(&self) -> Option<&str> {
-      Some("?{\"c\": \"\u{200b}#foo\"}")
+      Some("{\"c\": \"#foo\"}")
     }
   }
   impl Identifiable for PosixNonLenBlankUnicode {
@@ -327,7 +327,7 @@ pub(crate) mod test {
       r#"\a\b\c.js"#
     }
     fn query(&self) -> Option<&str> {
-      Some("?{\"c\": \"\u{200b}#foo\"}")
+      Some("{\"c\": \"#foo\"}")
     }
   }
   impl Identifiable for WinNonLenBlankUnicode {
@@ -341,7 +341,7 @@ pub(crate) mod test {
     let c1 = Arc::new(PosixNonLenBlankUnicode) as Arc<dyn Loader<()>>;
     let l: LoaderItem<()> = c1.into();
     assert_eq!(l.path(), "/a/b/c.js");
-    assert_eq!(l.query(), Some("{\"c\": \"#foo\"}".into()));
+    assert_eq!(l.query(), Some("{\"c\": \"#foo\"}"));
     assert_eq!(l.fragment(), None);
   }
 
@@ -350,7 +350,7 @@ pub(crate) mod test {
     let c1 = Arc::new(WinNonLenBlankUnicode) as Arc<dyn Loader<()>>;
     let l: LoaderItem<()> = c1.into();
     assert_eq!(l.path(), r#"\a\b\c.js"#);
-    assert_eq!(l.query(), Some("{\"c\": \"#foo\"}".into()));
+    assert_eq!(l.query(), Some("{\"c\": \"#foo\"}"));
     assert_eq!(l.fragment(), None);
   }
 }

@@ -41,6 +41,7 @@ pub async fn stringify_loaders_and_resource<'a>(
     for loader in loaders {
       s.push_str(loader.path());
       if let Some(query) = loader.query() {
+        s.push('?');
         s.push_str(query);
       }
       s.push('!');

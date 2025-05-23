@@ -301,6 +301,9 @@ mod test {
         IDENTS.with(|i| i.borrow_mut().push("pitch1".to_string()));
         Ok(())
       }
+      fn path(&self) -> &str {
+        "/rspack/pitching-loader1"
+      }
     }
 
     #[cacheable]
@@ -318,6 +321,9 @@ mod test {
       async fn pitch(&self, _loader_context: &mut LoaderContext<()>) -> Result<()> {
         IDENTS.with(|i| i.borrow_mut().push("pitch2".to_string()));
         Ok(())
+      }
+      fn path(&self) -> &str {
+        "/rspack/pitching-loader2"
       }
     }
 
@@ -337,6 +343,9 @@ mod test {
         IDENTS.with(|i| i.borrow_mut().push("normal1".to_string()));
         Ok(())
       }
+      fn path(&self) -> &str {
+        "/rspack/normal-loader1"
+      }
     }
 
     #[cacheable]
@@ -354,6 +363,10 @@ mod test {
       async fn run(&self, _loader_context: &mut LoaderContext<()>) -> Result<()> {
         IDENTS.with(|i| i.borrow_mut().push("normal2".to_string()));
         Ok(())
+      }
+
+      fn path(&self) -> &str {
+        "/rspack/normal-loader2"
       }
     }
 
@@ -377,6 +390,10 @@ mod test {
       async fn pitch(&self, _loader_context: &mut LoaderContext<()>) -> Result<()> {
         IDENTS.with(|i| i.borrow_mut().push("pitch-normal-base-pitch".to_string()));
         Ok(())
+      }
+
+      fn path(&self) -> &str {
+        "/rspack/pitch-normal-base-loader"
       }
     }
 
@@ -402,6 +419,10 @@ mod test {
         loader_context.content = Some(Content::Buffer(vec![]));
         Ok(())
       }
+
+      fn path(&self) -> &str {
+        "/rspack/pitch-normal-loader"
+      }
     }
 
     #[cacheable]
@@ -425,6 +446,10 @@ mod test {
         IDENTS.with(|i| i.borrow_mut().push("pitch-normal-pitch-2".to_string()));
         loader_context.content = Some(Content::Buffer(vec![]));
         Ok(())
+      }
+
+      fn path(&self) -> &str {
+        "/rspack/pitch-normal-2-loader"
       }
     }
 
@@ -515,6 +540,10 @@ mod test {
         loader_context.finish_with(("".to_string(), None, None));
         Ok(())
       }
+
+      fn path(&self) -> &str {
+        "/rspack/normal-loader1"
+      }
     }
 
     #[cacheable]
@@ -534,6 +563,10 @@ mod test {
         additional_data.insert("additional-data");
         loader_context.finish_with(("".to_string(), None, Some(additional_data)));
         Ok(())
+      }
+
+      fn path(&self) -> &str {
+        "/rspack/normal-loader2"
       }
     }
 
@@ -581,6 +614,10 @@ mod test {
         // Does not call `LoaderContext::finish_with`
         Ok(())
       }
+
+      fn path(&self) -> &str {
+        "/rspack/normal-loader1"
+      }
     }
 
     let rs = Arc::new(ResourceData {
@@ -615,6 +652,10 @@ mod test {
         assert!(source_map.is_none());
         assert!(additional_data.is_none());
         Ok(())
+      }
+
+      fn path(&self) -> &str {
+        "/rspack/normal-loader2"
       }
     }
 
