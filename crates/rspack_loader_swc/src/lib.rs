@@ -133,6 +133,9 @@ impl Loader<RunnerContext> for SwcLoader {
     #[cfg(any(not(debug_assertions), target_family = "wasm"))]
     inner()
   }
+  fn path(&self) -> &str {
+    SWC_LOADER_IDENTIFIER
+  }
 }
 
 impl Identifiable for SwcLoader {

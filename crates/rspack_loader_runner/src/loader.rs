@@ -13,7 +13,7 @@ use regex::Regex;
 use rspack_cacheable::cacheable_dyn;
 use rspack_collections::{Identifiable, Identifier};
 use rspack_error::Result;
-use rspack_paths::{Utf8Path, Utf8PathBuf};
+use rspack_paths::Utf8PathBuf;
 use rspack_util::identifier::strip_zero_width_space_for_fragment;
 
 use super::LoaderContext;
@@ -22,20 +22,6 @@ use super::LoaderContext;
 pub struct LoaderItem<Context> {
   #[debug("{}", loader.identifier())]
   loader: Arc<dyn Loader<Context>>,
-  /// Loader identifier
-  request: Identifier,
-  /// An absolute path or a virtual path for represent the loader.
-  /// The absolute path is used to represent a loader stayed on the JS side.
-  /// `$` split chain may be used to represent a composed loader chain from the JS side.
-  /// Virtual path with a builtin protocol to represent a loader from the native side. e.g "builtin:".
-  #[allow(dead_code)]
-  path: Utf8PathBuf,
-  /// Query of a loader, starts with `?`
-  #[allow(dead_code)]
-  query: Option<String>,
-  /// Fragment of a loader, starts with `#`.
-  #[allow(dead_code)]
-  fragment: Option<String>,
   /// Data shared between pitching and normal
   data: serde_json::Value,
   r#type: String,
@@ -51,29 +37,29 @@ pub struct LoaderItem<Context> {
   finish_called: AtomicBool,
 }
 
-impl<C> LoaderItem<C> {
+impl<C: Send> LoaderItem<C> {
   pub fn loader(&self) -> &Arc<dyn Loader<C>> {
     &self.loader
   }
 
   #[inline]
   pub fn request(&self) -> Identifier {
-    self.request
+    self.loader.identifier()
   }
 
   #[inline]
-  pub fn path(&self) -> &Utf8Path {
-    &self.path
+  pub fn path(&self) -> &str {
+    self.loader.path()
   }
 
   #[inline]
   pub fn query(&self) -> Option<&str> {
-    self.query.as_deref()
+    self.loader.query()
   }
 
   #[inline]
   pub fn fragment(&self) -> Option<&str> {
-    self.fragment.as_deref()
+    self.loader.fragment()
   }
 
   #[inline]
@@ -197,6 +183,15 @@ where
     // noop
     Ok(())
   }
+  fn path(&self) -> &str;
+  /// Query of a loader
+  fn query(&self) -> Option<&str> {
+    None
+  }
+  /// Fragment of a loader
+  fn fragment(&self) -> Option<&str> {
+    None
+  }
 }
 
 impl<C> From<Arc<dyn Loader<C>>> for LoaderItem<C>
@@ -204,37 +199,8 @@ where
   C: Send,
 {
   fn from(loader: Arc<dyn Loader<C>>) -> Self {
-    if let Some((r#type, ident)) = loader.identifier().split_once('|') {
-      let ResourceParsedData {
-        path,
-        query,
-        fragment,
-      } = parse_resource(ident).expect("identifier should be valid");
-      return Self {
-        loader,
-        request: ident.into(),
-        path,
-        query,
-        fragment,
-        data: serde_json::Value::Null,
-        r#type: r#type.to_string(),
-        pitch_executed: AtomicBool::new(false),
-        normal_executed: AtomicBool::new(false),
-        finish_called: AtomicBool::new(false),
-      };
-    }
-    let ident = loader.identifier();
-    let ResourceParsedData {
-      path,
-      query,
-      fragment,
-    } = parse_resource(&ident).expect("identifier should be valid");
     Self {
       loader,
-      request: ident,
-      path,
-      query,
-      fragment,
       data: serde_json::Value::Null,
       r#type: String::default(),
       pitch_executed: AtomicBool::new(false),
@@ -272,7 +238,7 @@ static PATH_QUERY_FRAGMENT_REGEXP: LazyLock<Regex> = LazyLock::new(|| {
 
 #[cfg(test)]
 pub(crate) mod test {
-  use std::{path::PathBuf, sync::Arc};
+  use std::sync::Arc;
 
   use rspack_cacheable::{cacheable, cacheable_dyn};
   use rspack_collections::{Identifiable, Identifier};
@@ -284,7 +250,14 @@ pub(crate) mod test {
   pub(crate) struct Custom;
   #[cacheable_dyn]
   #[async_trait::async_trait]
-  impl Loader<()> for Custom {}
+  impl Loader<()> for Custom {
+    fn path(&self) -> &str {
+      "/rspack/custom-loader-1/index.js"
+    }
+    fn query(&self) -> Option<&str> {
+      Some("?foo=1")
+    }
+  }
   impl Identifiable for Custom {
     fn identifier(&self) -> Identifier {
       "/rspack/custom-loader-1/index.js?foo=1#baz".into()
@@ -296,7 +269,14 @@ pub(crate) mod test {
   pub(crate) struct Custom2;
   #[cacheable_dyn]
   #[async_trait::async_trait]
-  impl Loader<()> for Custom2 {}
+  impl Loader<()> for Custom2 {
+    fn path(&self) -> &str {
+      "/rspack/custom-loader-2/index.js"
+    }
+    fn query(&self) -> Option<&str> {
+      Some("?bar=2")
+    }
+  }
   impl Identifiable for Custom2 {
     fn identifier(&self) -> Identifier {
       "/rspack/custom-loader-2/index.js?bar=2#baz".into()
@@ -308,7 +288,11 @@ pub(crate) mod test {
   pub(crate) struct Builtin;
   #[cacheable_dyn]
   #[async_trait::async_trait]
-  impl Loader<()> for Builtin {}
+  impl Loader<()> for Builtin {
+    fn path(&self) -> &str {
+      "builtin:test-loader"
+    }
+  }
   impl Identifiable for Builtin {
     fn identifier(&self) -> Identifier {
       "builtin:test-loader".into()
@@ -320,7 +304,14 @@ pub(crate) mod test {
 
   #[cacheable_dyn]
   #[async_trait::async_trait]
-  impl Loader<()> for PosixNonLenBlankUnicode {}
+  impl Loader<()> for PosixNonLenBlankUnicode {
+    fn path(&self) -> &str {
+      "/a/b/c.js"
+    }
+    fn query(&self) -> Option<&str> {
+      Some("?{\"c\": \"\u{200b}#foo\"}")
+    }
+  }
   impl Identifiable for PosixNonLenBlankUnicode {
     fn identifier(&self) -> Identifier {
       "/a/b/c.js?{\"c\": \"\u{200b}#foo\"}".into()
@@ -331,7 +322,14 @@ pub(crate) mod test {
   pub(crate) struct WinNonLenBlankUnicode;
   #[cacheable_dyn]
   #[async_trait::async_trait]
-  impl Loader<()> for WinNonLenBlankUnicode {}
+  impl Loader<()> for WinNonLenBlankUnicode {
+    fn path(&self) -> &str {
+      r#"\a\b\c.js"#
+    }
+    fn query(&self) -> Option<&str> {
+      Some("?{\"c\": \"\u{200b}#foo\"}")
+    }
+  }
   impl Identifiable for WinNonLenBlankUnicode {
     fn identifier(&self) -> Identifier {
       "\\a\\b\\c.js?{\"c\": \"\u{200b}#foo\"}".into()
@@ -342,17 +340,17 @@ pub(crate) mod test {
   fn should_handle_posix_non_len_blank_unicode_correctly() {
     let c1 = Arc::new(PosixNonLenBlankUnicode) as Arc<dyn Loader<()>>;
     let l: LoaderItem<()> = c1.into();
-    assert_eq!(l.path, PathBuf::from("/a/b/c.js"));
-    assert_eq!(l.query, Some("?{\"c\": \"#foo\"}".into()));
-    assert_eq!(l.fragment, None);
+    assert_eq!(l.path(), "/a/b/c.js");
+    assert_eq!(l.query(), Some("{\"c\": \"#foo\"}".into()));
+    assert_eq!(l.fragment(), None);
   }
 
   #[test]
   fn should_handle_win_non_len_blank_unicode_correctly() {
     let c1 = Arc::new(WinNonLenBlankUnicode) as Arc<dyn Loader<()>>;
     let l: LoaderItem<()> = c1.into();
-    assert_eq!(l.path, PathBuf::from(r#"\a\b\c.js"#));
-    assert_eq!(l.query, Some("?{\"c\": \"#foo\"}".into()));
-    assert_eq!(l.fragment, None);
+    assert_eq!(l.path(), r#"\a\b\c.js"#);
+    assert_eq!(l.query(), Some("{\"c\": \"#foo\"}".into()));
+    assert_eq!(l.fragment(), None);
   }
 }

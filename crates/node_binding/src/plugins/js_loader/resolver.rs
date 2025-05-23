@@ -23,14 +23,29 @@ use super::{JsLoaderRspackPlugin, JsLoaderRspackPluginInner};
 
 #[cacheable]
 #[derive(Debug)]
-pub struct JsLoader(pub Identifier);
+pub struct JsLoader {
+  identifier: Identifier,
+  path: String,
+  query: Option<String>,
+  fragment: Option<String>,
+}
 
 #[cacheable_dyn]
-impl Loader<RunnerContext> for JsLoader {}
+impl Loader<RunnerContext> for JsLoader {
+  fn path(&self) -> &str {
+    &self.path
+  }
+  fn query(&self) -> Option<&str> {
+    self.query.as_deref()
+  }
+  fn fragment(&self) -> Option<&str> {
+    self.fragment.as_deref()
+  }
+}
 
 impl Identifiable for JsLoader {
   fn identifier(&self) -> Identifier {
-    self.0
+    self.identifier
   }
 }
 
@@ -144,12 +159,12 @@ pub(crate) async fn resolve_loader(
         path,
         query,
         description_data,
-        ..
+        fragment,
       } = resource;
       // Pitfall: `Path::ends_with` is different from `str::ends_with`
       // So we need to convert `PathBuf` to `&str`
       // Use `str::ends_with` instead of `Path::extension` to avoid unnecessary allocation
-      let path = path.as_str();
+      let path = path.into_string();
 
       let r#type = if path.ends_with(".mjs") {
         Some("module")
@@ -168,12 +183,21 @@ pub(crate) async fn resolve_loader(
       } else {
         format!("{path}{query}")
       };
-      let ident = if let Some(ty) = r#type {
+      let identifier_str: String = if let Some(ty) = r#type {
         format!("{ty}|{resource}")
       } else {
         resource
       };
-      Ok(Some(Arc::new(JsLoader(ident.into()))))
+      Ok(Some(Arc::new(JsLoader {
+        identifier: identifier_str.into(),
+        path,
+        query: if query.is_empty() { None } else { Some(query) },
+        fragment: if fragment.is_empty() {
+          None
+        } else {
+          Some(fragment)
+        },
+      })))
     }
     ResolveResult::Ignored => Err(error!(
       "Failed to resolve loader: loader_request={prev}, context={context}"

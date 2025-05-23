@@ -60,7 +60,7 @@ pub struct LoaderContext<Context> {
   pub plugin: Option<Arc<dyn LoaderRunnerPlugin<Context = Context>>>,
 }
 
-impl<Context> LoaderContext<Context> {
+impl<Context: Send> LoaderContext<Context> {
   pub fn remaining_request(&self) -> LoaderItemList<Context> {
     if self.loader_index >= self.loader_items.len() as i32 - 1 {
       return Default::default();

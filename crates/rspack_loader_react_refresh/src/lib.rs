@@ -52,6 +52,9 @@ Promise.resolve().then(function() {
     loader_context.finish_with((source, sm));
     Ok(())
   }
+  fn path(&self) -> &str {
+    REACT_REFRESH_LOADER_IDENTIFIER
+  }
 }
 
 pub const REACT_REFRESH_LOADER_IDENTIFIER: &str = "builtin:react-refresh-loader";

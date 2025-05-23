@@ -43,6 +43,9 @@ impl Loader<RunnerContext> for PreactRefreshLoader {
     loader_context.finish_with((source, sm));
     Ok(())
   }
+  fn path(&self) -> &str {
+    PREACT_REFRESH_LOADER_IDENTIFIER
+  }
 }
 
 pub const PREACT_REFRESH_LOADER_IDENTIFIER: &str = "builtin:preact-refresh-loader";

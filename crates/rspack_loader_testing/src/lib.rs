@@ -20,6 +20,9 @@ impl Loader<RunnerContext> for SimpleLoader {
     loader_context.finish_with(format!("module.exports = {}", json!(export)));
     Ok(())
   }
+  fn path(&self) -> &str {
+    SIMPLE_LOADER_IDENTIFIER
+  }
 }
 impl Identifiable for SimpleLoader {
   fn identifier(&self) -> Identifier {
@@ -39,6 +42,9 @@ impl Loader<RunnerContext> for SimpleAsyncLoader {
     };
     loader_context.finish_with(format!("{}-async-simple", content.try_into_string()?));
     Ok(())
+  }
+  fn path(&self) -> &str {
+    SIMPLE_ASYNC_LOADER_IDENTIFIER
   }
 }
 impl Identifiable for SimpleAsyncLoader {
@@ -65,6 +71,9 @@ impl Loader<RunnerContext> for PitchingLoader {
     );
     Ok(())
   }
+  fn path(&self) -> &str {
+    PITCHING_LOADER_IDENTIFIER
+  }
 }
 impl Identifiable for PitchingLoader {
   fn identifier(&self) -> Identifier {
@@ -83,6 +92,9 @@ impl Loader<RunnerContext> for PassthroughLoader {
     loader_context.finish_with(patch_data);
     Ok(())
   }
+  fn path(&self) -> &str {
+    PASS_THROUGH_LOADER_IDENTIFIER
+  }
 }
 impl Identifiable for PassthroughLoader {
   fn identifier(&self) -> Identifier {
@@ -100,6 +112,9 @@ impl Loader<RunnerContext> for NoPassthroughLoader {
     let (content, _, _) = loader_context.take_all();
     loader_context.finish_with(content);
     Ok(())
+  }
+  fn path(&self) -> &str {
+    NO_PASS_THROUGH_LOADER_IDENTIFIER
   }
 }
 impl Identifiable for NoPassthroughLoader {

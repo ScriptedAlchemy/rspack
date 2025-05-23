@@ -271,6 +271,9 @@ impl Loader<RunnerContext> for LightningCssLoader {
     // for better diagnostic, as async_trait macro don't show beautiful error message
     self.loader_impl(loader_context).await
   }
+  fn path(&self) -> &str {
+    LIGHTNINGCSS_LOADER_IDENTIFIER
+  }
 }
 
 pub fn to_static(
