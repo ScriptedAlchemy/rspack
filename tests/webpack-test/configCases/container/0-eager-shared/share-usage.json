@@ -1,0 +1,7 @@
+{
+  "treeShake": {
+    "tiny-emitter": {
+      "*": false
+    }
+  }
+}

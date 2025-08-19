@@ -1,0 +1,7 @@
+{
+  "treeShake": {
+    "react": {
+      "default": false
+    }
+  }
+}

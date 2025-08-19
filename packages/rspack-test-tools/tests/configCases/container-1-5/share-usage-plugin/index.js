@@ -1,12 +1,18 @@
-const mod = require("./module");
-const collectedShares = __non_webpack_require__('./share-usage.json')
+it("should tree shake unused exports in shared modules", async () => {
+  // Import the module dynamically to use the exports
+  const mod = await import("./module");
+  
+  // Read share-usage.json using fs instead of require to avoid bundling issues
+  const fs = require('fs');
+  const path = require('path');
+  const shareUsageContent = fs.readFileSync(path.join(__dirname, 'share-usage.json'), 'utf8');
+  const collectedShares = JSON.parse(shareUsageContent);
 
-// Actually use the exports so they're marked as used
-const locallyUsed = mod.used;
-const alsoLocallyUsed = mod.alsoUsed;
-const usedInBothPlaces = mod.usedBoth;
+  // Actually use the exports so they're marked as used
+  const locallyUsed = mod.used;
+  const alsoLocallyUsed = mod.alsoUsed;
+  const usedInBothPlaces = mod.usedBoth;
 
-it("should tree shake unused exports in shared modules", () => {
   // Directly used exports - should be available
   expect(locallyUsed).toBe(42);
   expect(alsoLocallyUsed).toBe("directly imported");

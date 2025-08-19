@@ -279,15 +279,17 @@ impl ShareUsagePlugin {
     // Look through all modules to find ones that are being shared
     for module_id in module_graph.modules().keys() {
       if let Some(module) = module_graph.module_by_identifier(module_id) {
-        // Check if this module is being shared by looking at its usage
-        let module_identifier = module.identifier().to_string();
-
-        // For now, we'll assume the share key is "module" based on the config
-        // In a real implementation, we would need to map from the shared config
-        if module_identifier.contains("module.js") {
+        // Check if this module has a shared_key (indicating it's being shared)
+        if let Some(shared_key) = &module.build_meta().shared_key {
           let usage = self.analyze_exports_usage(&module_graph, module_id);
-          usage_map.insert("module".to_string(), usage);
-          break;
+          usage_map.insert(shared_key.clone(), usage);
+        }
+        // Also check for ConsumeShared modules and their fallbacks
+        else if let Some(consume_key) = module.get_consume_shared_key() {
+          if let Some(fallback_id) = self.find_fallback_module_id(&module_graph, module_id) {
+            let usage = self.analyze_exports_usage(&module_graph, &fallback_id);
+            usage_map.insert(consume_key.to_string(), usage);
+          }
         }
       }
     }

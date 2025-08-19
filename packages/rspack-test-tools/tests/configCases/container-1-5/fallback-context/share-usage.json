@@ -1,0 +1,7 @@
+{
+  "treeShake": {
+    "./src/shared.js": {
+      "ok": false
+    }
+  }
+}

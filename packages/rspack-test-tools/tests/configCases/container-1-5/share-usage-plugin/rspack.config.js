@@ -12,26 +12,26 @@ const { ModuleFederationPlugin } = require("@rspack/core").container;
  * @type {import("@rspack/core").Configuration}
  */
 module.exports = {
-	entry: './index.js',
-  mode: "production",
-  optimization: {
-    usedExports: true,
-    sideEffects: false,
-  },
-  plugins: [
-    new ModuleFederationPlugin({
-      name: "app",
-      filename: "remoteEntry.js",
-      exposes: {
-        "./module": "./module",
-      },
-      shared: {
-        "./module": {
-          shareKey: "module",
-          version: "1.0.0",
-          singleton: true,
-        },
-      },
-    }),
-  ],
+	entry: "./index.js",
+	optimization: {
+		minimize: false,
+		usedExports: true,
+		sideEffects: false
+	},
+	plugins: [
+		new ModuleFederationPlugin({
+			name: "app",
+			filename: "remoteEntry.js",
+			exposes: {
+				"./module": "./module"
+			},
+			shared: {
+				"./module": {
+					shareKey: "module",
+					version: "1.0.0",
+					singleton: true
+				}
+			}
+		})
+	]
 };
