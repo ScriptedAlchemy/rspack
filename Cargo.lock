@@ -4247,6 +4247,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "rspack_cuda"
+version = "0.103.3"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "rspack_cuda_test"
+version = "0.103.3"
+dependencies = [
+ "rspack_cuda",
+]
+
+[[package]]
 name = "rspack_dojang"
 version = "0.103.3"
 dependencies = [
@@ -5394,6 +5408,7 @@ dependencies = [
  "regex",
  "rspack_collections",
  "rspack_core",
+ "rspack_cuda",
  "rspack_error",
  "rspack_hash",
  "rspack_hook",
@@ -5401,6 +5416,8 @@ dependencies = [
  "rspack_regex",
  "rspack_util",
  "rustc-hash",
+ "serde",
+ "serde_json",
  "smallvec",
  "tokio",
  "tracing",

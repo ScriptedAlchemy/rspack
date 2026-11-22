@@ -1,0 +1,26 @@
+[package]
+description       = "Dedicated tests for the experimental Rspack CUDA pair filter"
+edition.workspace = true
+license.workspace = true
+name              = "rspack_cuda_test"
+publish           = false
+version.workspace = true
+
+[features]
+cuda    = ["rspack_cuda/cuda"]
+default = []
+
+[dev-dependencies]
+rspack_cuda = { workspace = true }
+
+[[test]]
+name = "validation"
+path = "tests/validation.rs"
+
+[[test]]
+name              = "device"
+path              = "tests/device.rs"
+required-features = ["cuda"]
+
+[lints]
+workspace = true

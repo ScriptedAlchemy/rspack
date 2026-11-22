@@ -1,6 +1,7 @@
 mod bitmap;
 mod chunk;
 mod intersections;
+mod intersections_backend;
 mod max_request;
 pub mod max_size;
 pub mod min_size;
@@ -268,7 +269,7 @@ impl SplitChunksPlugin {
             module_sizes: &module_sizes,
             compilation,
           },
-        );
+        )?;
       }
 
       if cache_groups
@@ -287,7 +288,7 @@ impl SplitChunksPlugin {
             module_sizes: &module_sizes,
             compilation,
           },
-        );
+        )?;
       }
 
       let mut module_group_map = self

@@ -9,23 +9,27 @@ use std::{
 
 use hashbrown::HashTable;
 use rayon::prelude::*;
+use rspack_error::Result;
 use rustc_hash::{FxHashMap, FxHasher};
 
-use super::bitmap::ChunkBitmap;
+use super::{
+  bitmap::ChunkBitmap,
+  intersections_backend::{DiscoveryInput, IntersectionExecution},
+};
 
 pub(super) struct Intersection {
   pub chunks: Vec<u32>,
   pub support: Vec<usize>,
 }
 
-fn bitmap_hash(bitmap: &ChunkBitmap) -> u64 {
+pub(super) fn bitmap_hash(bitmap: &ChunkBitmap) -> u64 {
   let mut hasher = FxHasher::default();
   bitmap.hash(&mut hasher);
   hasher.finish()
 }
 
 // Borrow each round's inputs and reuse their hashes without cloning bitmaps.
-type KnownBitmaps<'a> = HashTable<(&'a ChunkBitmap, u64)>;
+pub(super) type KnownBitmaps<'a> = HashTable<(&'a ChunkBitmap, u64)>;
 
 fn has_min_size(rows: impl Iterator<Item = usize>, sizes: &[u64], min_size: u64) -> bool {
   let mut size = 0u64;
@@ -38,14 +42,14 @@ fn has_min_size(rows: impl Iterator<Item = usize>, sizes: &[u64], min_size: u64)
   size >= min_size
 }
 
-struct CandidateGenerator {
-  hash: u64,
-  order: (usize, usize),
+pub(super) struct CandidateGenerator {
+  pub(super) hash: u64,
+  pub(super) order: (usize, usize),
 }
 
 // Store a generator into the immutable inputs instead of copying each bitmap.
 // HashTable accepts the cached hash while still checking exact equality.
-fn insert_candidate(
+pub(super) fn insert_candidate(
   candidates: &mut HashTable<CandidateGenerator>,
   bitmap: &ChunkBitmap,
   candidate: CandidateGenerator,
@@ -65,7 +69,7 @@ fn insert_candidate(
   }
 }
 
-fn discover_intersections(
+pub(super) fn discover_intersections_cpu(
   bitmaps: &[ChunkBitmap],
   lengths: &[usize],
   first: usize,
@@ -161,9 +165,10 @@ pub(super) fn collect_intersections(
   min_size: u64,
   min_chunks: usize,
   dedup_depth: u32,
-) -> Vec<Intersection> {
+) -> Result<Vec<Intersection>> {
+  let execution = IntersectionExecution::from_env()?;
   if dedup_depth == 0 || originals.len() < 2 {
-    return vec![];
+    return Ok(vec![]);
   }
   let min_chunks = min_chunks.max(1);
   // The caller provides conservative size bounds for this priority. Missing
@@ -172,7 +177,7 @@ pub(super) fn collect_intersections(
     total.saturating_add(sizes.get(i).copied().unwrap_or(u64::MAX))
   });
   if total_bound < min_size {
-    return vec![];
+    return Ok(vec![]);
   }
   let mut coordinates = originals.iter().flatten().copied().collect::<Vec<_>>();
   coordinates.sort_unstable();
@@ -219,15 +224,20 @@ pub(super) fn collect_intersections(
     for (bitmap, &hash) in bitmaps.iter().zip(&hashes) {
       known.insert_unique(hash, (bitmap, hash), |&(_, hash)| hash);
     }
-    let next = discover_intersections(
-      &bitmaps,
-      &lengths,
-      first,
-      &known,
-      excluded,
-      min_chunks,
-      coordinates.len(),
-    );
+    let next = execution.discover(
+      DiscoveryInput {
+        bitmaps: &bitmaps,
+        lengths: &lengths,
+        first,
+        known: &known,
+        excluded,
+        min_chunks,
+        chunk_count: coordinates.len(),
+      },
+      round,
+      originals.len(),
+      dedup_depth,
+    )?;
     drop(known);
     if next.is_empty() {
       break;
@@ -248,7 +258,7 @@ pub(super) fn collect_intersections(
     }
   }
   if candidates.is_empty() {
-    return vec![];
+    return Ok(vec![]);
   }
 
   // Lists use less space than a bitmap for rare chunks. Dense supports retain
@@ -336,5 +346,5 @@ pub(super) fn collect_intersections(
     row.chunks.hash(&mut hasher);
     (Reverse(row.chunks.len()), hasher.finish())
   });
-  rows
+  Ok(rows)
 }
