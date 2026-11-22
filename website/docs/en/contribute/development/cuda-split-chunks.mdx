@@ -1,0 +1,165 @@
+---
+description: 'Build and measure the optional CUDA experiment for SplitChunks intersection discovery.'
+---
+
+# CUDA SplitChunks experiment
+
+This fork includes an opt-in CUDA experiment for the bitmap pair filtering in
+SplitChunks intersection discovery. The default backend remains the existing
+CPU implementation. Ordinary builds do not compile or link CUDA.
+
+The experiment does not establish a performance improvement. It makes it
+possible to measure whether offloading this particular operation saves time
+after input packing, transfers, launches, CPU deduplication, and initialization.
+Use a release binding for performance measurements.
+
+## What runs on the GPU
+
+For each frozen discovery round, the backend uploads a row-major matrix of
+chunk-membership bitmaps and their cardinalities. A tiled CUDA kernel examines
+input pairs and retains only proper intersections meeting `minChunks` that do
+not intersect an exclusion mask. Each launch examines at most 65,536 pairs and
+returns a bounded compact list of input indices.
+
+The CPU reconstructs each accepted intersection and uses the existing exact
+hash-table deduplication. It preserves the earliest generating pair and sorts
+results into the same discovery order as the CPU backend. Newly discovered
+sets become inputs only in the next round. Exclusion pruning remains confined
+to the final round, as in the original implementation.
+
+Support calculation, size bounds, cache-group policy, chunk creation, module
+parsing, transforms, minification, and output generation remain CPU work. A
+large JavaScript application is useful only if it produces enough distinct,
+overlapping chunk-membership sets to exercise this stage.
+
+## Build
+
+The native backend currently supports Linux x86_64 and aarch64. Use a CUDA
+toolkit with `nvcc`, its development headers, static CUDA runtime, and a
+compatible C++ compiler. Running the backend also requires a CUDA-capable
+NVIDIA device and driver. The static runtime avoids a load-time dependency on
+`libcudart.so`; it still needs the NVIDIA driver when CUDA is selected.
+
+Use the repository's pinned Rust toolchain and pnpm version:
+
+```bash
+pnpm install --frozen-lockfile
+RSPACK_BUILD_CUDA=1 pnpm run build:binding:release
+pnpm run build:js
+```
+
+`RSPACK_BUILD_CUDA=1` forwards the `cuda` Cargo feature to the binding. Direct
+Cargo builds can use `cargo build -p rspack_node --features cuda --release`;
+the pnpm binding command additionally places and prepares the Node artifact.
+
+The default architecture is `75`, with native code and PTX for forward JIT
+compatibility. Set `RSPACK_CUDA_ARCH` to the numeric architecture supported by
+your GPU and toolkit, for example:
+
+```bash
+RSPACK_BUILD_CUDA=1 RSPACK_CUDA_ARCH=120 pnpm run build:binding:release
+```
+
+The compiler rejects unsupported architectures. Use `NVCC` when `nvcc` is not
+on `PATH`; the `cc` build helper also honors its normal compiler environment
+variables. Building the feature for other operating systems or architectures
+uses an unavailable backend with a build warning.
+
+Keep the JS package and native binding from the same checkout. The binding
+exports `EXPECTED_RSPACK_CORE_VERSION`; using a new native binary with an older
+published `@rspack/core` does not constitute a valid experiment.
+
+## Runtime controls
+
+These environment variables are experimental controls rather than a stable
+Rspack configuration API. Set them before starting the build process.
+
+| Variable                        | Values and behavior                                             |
+| ------------------------------- | --------------------------------------------------------------- |
+| `RSPACK_SPLIT_CHUNKS_BACKEND`   | `cpu` (default), `cuda`, or `auto`                              |
+| `RSPACK_SPLIT_CHUNKS_TELEMETRY` | Absolute JSONL output filename; its parent directory must exist |
+| `RSPACK_SPLIT_CHUNKS_VERIFY`    | `1` compares CUDA discovery against the CPU; default `0`        |
+
+`cuda` forces the backend when intersection discovery runs. An unavailable
+backend or a CUDA error fails the build. `auto` uses the CPU below an estimated
+1,048,576 pair-word operations, without a compiled CUDA feature, or after a
+CUDA error. This threshold is an initial heuristic, not a measured crossover.
+An error discards all partial GPU results before rerunning the round on CPU.
+Telemetry records the backend actually used and the fallback reason.
+
+Some configurations do not invoke intersection discovery. In particular,
+`dedupDepth: 0`, disabled SplitChunks, or only named cache groups can result in
+no GPU work. A successful process exit by itself does not prove acceleration:
+require telemetry with `backend: "cuda"` and positive `kernel_launches`.
+
+Anonymous cache groups with a positive `minSize` or `minSizeReduction` can use
+intersection discovery. Shared modules imported by overlapping sets of routes
+and lazy chunks exercise it more directly than large payload strings or copied
+static assets. Keep any stress configuration separately labeled from the
+application's normal production configuration.
+
+## Correctness checks
+
+Default-build validation needs no toolkit or GPU:
+
+```bash
+cargo test -p rspack_cuda_test
+```
+
+The device suite compares actual CUDA output with a scalar reference across
+multiword bitmaps, partial tiles, different round frontiers, duplicates,
+subsets, exclusion masks, cardinality thresholds, and multiple bounded batches:
+
+```bash
+cargo test -p rspack_cuda_test --features cuda
+```
+
+The device suite intentionally fails when no CUDA device is available. Compile
+it without execution using `--no-run` when validating on a build-only host.
+
+After building the CUDA binding and JS packages, run the existing integration
+fixtures in verification mode:
+
+```bash
+RSPACK_SPLIT_CHUNKS_BACKEND=cuda RSPACK_SPLIT_CHUNKS_VERIFY=1 \
+  pnpm --dir tests/rspack-test run test \
+  -t 'configCases/split-chunks/(intersections-min-size|intersections-support|dedup-depth|priority-residual-intersections|named-used-exports-dedup)'
+```
+
+Verification compares the exact ordered candidate generators, not just their
+counts. For an application benchmark, also compare emitted files and chunk
+outputs between CPU and CUDA before collecting samples. Keep verification
+disabled during measured runs because its CPU shadow execution affects total
+process time.
+
+## Measurements
+
+Each discovery-round record includes the input shape (`input_sets`,
+`original_sets`, `chunk_count`, `word_count`, `first_set`, `pair_count`), selected
+backend, fallback reason, candidate counts, kernel launches, transfer bytes,
+and stage times in milliseconds. `wall_ms` includes packing, backend work,
+CPU exact deduplication, and native resource cleanup. It excludes telemetry
+serialization, CPU verification, and later support/chunk processing.
+
+`kernel_ms`, `upload_ms`, and `download_ms` use CUDA events. `allocation_ms`
+measures host time for initialization and allocation. `backend_ms` includes
+backend calls; it overlaps the device-stage numbers, so these columns must
+not be added as independent durations. `cpu_dedup_ms` and `packing_ms` expose
+costs that a kernel-only speedup could hide. `verification_ms` is separate.
+
+Use the same release binary, generated sources, effective configuration,
+thread counts, and machine for CPU and CUDA samples. Alternate run order and
+report at least three samples per backend with raw times, median, and mean.
+Record binary and source identities. Include complete build-process wall time
+alongside discovery time and kernel time. Several compilers may run in parallel,
+so summed per-round durations are not the build's critical-path duration.
+
+Fresh-process production builds include CUDA context initialization and any
+PTX JIT cost. They do not measure warm persistent GPU contexts or incremental
+HMR. Clearing build output and tool caches does not clear the operating-system
+page cache. Keep these conditions explicit in benchmark reports.
+
+Large numbers of accepted duplicate pairs can make CPU reconstruction and
+deduplication dominate. Small graphs may be slower after offloading. GPU memory
+is bounded by the uploaded input matrix and fixed output buffers rather than
+all pairwise intersections; the input matrix itself can still be large.

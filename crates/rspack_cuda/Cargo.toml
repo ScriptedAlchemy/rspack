@@ -1,0 +1,21 @@
+[package]
+description          = "Optional CUDA kernels for Rspack experiments"
+edition.workspace    = true
+license.workspace    = true
+name                 = "rspack_cuda"
+repository.workspace = true
+version.workspace    = true
+
+[features]
+cuda    = ["dep:cc"]
+default = []
+
+[build-dependencies]
+cc = { version = "1.2.56", default-features = false, optional = true }
+
+[lints]
+workspace = true
+
+[lib]
+doctest = false
+test    = false

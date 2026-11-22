@@ -17,6 +17,10 @@ impl ChunkBitmap {
     self.words[bit / 64] |= 1u64 << (bit % 64);
   }
 
+  pub(super) fn words(&self) -> &[u64] {
+    &self.words
+  }
+
   pub(super) fn is_subset(&self, other: &Self) -> bool {
     debug_assert_eq!(self.words.len(), other.words.len());
     self

@@ -183,6 +183,7 @@ rspack_cacheable                       = { version = "=0.103.3", path = "crates/
 rspack_cacheable_macros                = { version = "=0.103.3", path = "crates/rspack_cacheable_macros", default-features = false }
 rspack_collections                     = { version = "=0.103.3", path = "crates/rspack_collections", default-features = false }
 rspack_core                            = { version = "=0.103.3", path = "crates/rspack_core", default-features = false }
+rspack_cuda                            = { version = "=0.103.3", path = "crates/rspack_cuda", default-features = false }
 rspack_dojang                          = { version = "=0.103.3", path = "crates/rspack_dojang", default-features = false }
 rspack_error                           = { version = "=0.103.3", path = "crates/rspack_error", default-features = false }
 rspack_fs                              = { version = "=0.103.3", path = "crates/rspack_fs", default-features = false }

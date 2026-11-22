@@ -676,12 +676,12 @@ impl Combinator {
     chunk_set_size_bounds: FxHashMap<ChunksKey, u64>,
     chunk_index_map: &FxHashMap<ChunkUkey, u32>,
     preparation: &IntersectionPreparation<'_>,
-  ) -> Option<CandidateRelations> {
+  ) -> Result<Option<CandidateRelations>> {
     // Both indexing paths retain candidates in this order.
     chunk_sets_by_count.sort_unstable_by_key(|set| (set.len(), set.key));
     let Some((min_chunks, _)) = &preparation.settings else {
       Self::index_original_sets(combinations, &chunk_sets_by_count);
-      return None;
+      return Ok(None);
     };
     let original_sets = chunk_sets_by_count
       .iter()
@@ -703,16 +703,16 @@ impl Combinator {
       preparation.min_size_bound(),
       *min_chunks,
       preparation.dedup_depth,
-    );
+    )?;
     Self::index_original_sets(combinations, &chunk_sets_by_count);
     if intersections.is_empty() {
-      return None;
+      return Ok(None);
     }
     if preparation.use_direct_candidates() {
-      return Some(CandidateRelations {
+      return Ok(Some(CandidateRelations {
         intersections,
         originals: chunk_sets_by_count.iter().map(|set| set.key).collect(),
-      });
+      }));
     }
     let chunks_by_index = chunks_by_index(chunk_index_map);
     for Intersection { chunks, support } in intersections {
@@ -735,7 +735,7 @@ impl Combinator {
           .push(intersection.clone());
       }
     }
-    None
+    Ok(None)
   }
 
   pub(super) fn prepare_group_by_chunks(
@@ -745,7 +745,7 @@ impl Combinator {
     chunk_index_map: &FxHashMap<ChunkUkey, u32>,
     min_chunks: usize,
     intersection_preparation: IntersectionPreparation<'_>,
-  ) {
+  ) -> Result<()> {
     let intersection_min_chunks = intersection_preparation
       .settings
       .as_ref()
@@ -801,7 +801,8 @@ impl Combinator {
       chunk_set_size_bounds,
       chunk_index_map,
       &intersection_preparation,
-    );
+    )?;
+    Ok(())
   }
 
   pub(super) fn prepare_group_by_used_exports(
@@ -812,7 +813,7 @@ impl Combinator {
     module_chunks: &[SsoHashSet<ChunkUkey>],
     chunk_index_map: &FxHashMap<ChunkUkey, u32>,
     intersection_preparation: IntersectionPreparation<'_>,
-  ) {
+  ) -> Result<()> {
     let intersection_min_chunks = intersection_preparation
       .settings
       .as_ref()
@@ -868,7 +869,8 @@ impl Combinator {
       chunk_set_size_bounds,
       chunk_index_map,
       &intersection_preparation,
-    );
+    )?;
+    Ok(())
   }
 }
 

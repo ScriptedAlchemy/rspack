@@ -51,6 +51,9 @@ async function build() {
 		const rustflags = []
 		const features = [];
 		const envs = { ...buildEnvironment };
+		if (process.env.RSPACK_BUILD_CUDA === "1") {
+			features.push("cuda");
+		}
 		const use_build_std = values.profile === "release"
 			|| values.profile === "release-debug"
 			|| values.profile === "release-wasi"

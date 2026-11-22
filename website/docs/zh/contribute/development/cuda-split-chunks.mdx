@@ -1,0 +1,127 @@
+---
+description: '构建并测量用于 SplitChunks 交集发现的可选 CUDA 实验。'
+---
+
+# CUDA SplitChunks 实验
+
+此分支提供可选的 CUDA 实验，用于过滤 SplitChunks 交集发现中的位图输入对。
+默认仍使用现有 CPU 实现，普通构建不会编译或链接 CUDA。
+本实验尚未证明性能提升；测量必须包含数据打包、传输、内核启动、CPU 去重和初始化成本。
+性能测试应使用 release 版本的原生绑定。
+
+## GPU 执行范围
+
+每轮发现使用固定不变的输入，将分块成员关系位图及其基数上传至设备。
+CUDA 内核按块检查输入对，仅返回满足 `minChunks`、严格小于两个输入集合，
+且不包含排除位的交集。每次启动最多检查 65,536 个输入对，结果缓冲区大小固定。
+
+CPU 根据返回的索引重新构造交集，并沿用现有的精确哈希表去重逻辑。
+该逻辑保留最早的生成输入对，并恢复与 CPU 相同的发现顺序。
+新集合仅在下一轮参与计算；排除位剪枝仍只用于最后一轮。
+支持集合计算、大小上界、缓存组规则、分块创建、解析、转换、压缩及产物输出仍在 CPU 上执行。
+只有产生足够多不同且重叠的分块成员集合时，大型应用才会有效覆盖此阶段。
+
+## 构建
+
+原生后端目前支持 Linux x86_64 和 aarch64，需要包含 `nvcc`、开发头文件、
+静态 CUDA 运行时及兼容 C++ 编译器的 CUDA 工具包。
+运行时还需要支持 CUDA 的 NVIDIA GPU 和驱动。
+静态运行时避免了加载绑定时对 `libcudart.so` 的依赖，但选择 CUDA 时仍需要驱动。
+
+使用仓库固定的 Rust 工具链及 pnpm 版本：
+
+```bash
+pnpm install --frozen-lockfile
+RSPACK_BUILD_CUDA=1 pnpm run build:binding:release
+pnpm run build:js
+```
+
+`RSPACK_BUILD_CUDA=1` 会启用绑定的 `cuda` Cargo feature。
+直接构建可用 `cargo build -p rspack_node --features cuda --release`；
+pnpm 构建命令还负责准备 Node 绑定文件。
+
+默认目标架构为 `75`，同时生成原生代码和支持后续架构 JIT 的 PTX。
+可通过 `RSPACK_CUDA_ARCH` 指定 GPU 与工具包共同支持的数字架构，例如：
+
+```bash
+RSPACK_BUILD_CUDA=1 RSPACK_CUDA_ARCH=120 pnpm run build:binding:release
+```
+
+不支持的架构会导致编译错误。`nvcc` 不在 `PATH` 中时可设置 `NVCC`；
+`cc` 构建辅助库的常规编译器环境变量也适用。
+在其他操作系统或架构上启用 feature 时，会输出构建警告并使用不可用后端。
+JS 包和原生绑定必须来自同一 checkout，原生导出的
+`EXPECTED_RSPACK_CORE_VERSION` 应与 `@rspack/core` 版本一致。
+
+## 运行时控制
+
+这些环境变量是实验控制项，并非稳定的 Rspack 配置 API。请在启动进程前设置。
+
+| 环境变量                        | 行为                                    |
+| ------------------------------- | --------------------------------------- |
+| `RSPACK_SPLIT_CHUNKS_BACKEND`   | `cpu`（默认）、`cuda` 或 `auto`         |
+| `RSPACK_SPLIT_CHUNKS_TELEMETRY` | JSONL 输出文件的绝对路径，父目录须存在  |
+| `RSPACK_SPLIT_CHUNKS_VERIFY`    | `1` 使用 CPU 校验 CUDA 结果，默认为 `0` |
+
+`cuda` 在执行交集发现时强制使用 CUDA，后端不可用或 CUDA 出错会使构建失败。
+`auto` 在估算工作量小于 1,048,576 次输入对与字运算、未编译 CUDA，或 CUDA 出错时使用 CPU。
+此阈值只是初始启发式规则，不是已测量的性能交叉点。
+发生错误时会丢弃全部 GPU 部分结果，再使用 CPU 重新计算该轮。
+遥测记录实际使用的后端及回退原因。
+
+`dedupDepth: 0`、关闭 SplitChunks 或仅使用命名缓存组等情况可能完全不执行交集发现。
+进程成功退出不能证明使用了 GPU，必须确认遥测包含 `backend: "cuda"` 和正数 `kernel_launches`。
+具有正数 `minSize` 或 `minSizeReduction` 的匿名缓存组可以使用交集发现。
+由重叠路由及异步分块集合引用的共享模块，比大字符串或复制静态资源更适合覆盖该阶段。
+压力测试配置应与应用的正常生产配置分别标注。
+
+## 正确性检查
+
+无需工具包或 GPU 即可检查默认构建：
+
+```bash
+cargo test -p rspack_cuda_test
+```
+
+设备测试将实际 CUDA 结果与标量参考实现比较，覆盖多字位图、尾部不完整块、
+不同轮次起点、重复集合、子集、排除位、基数阈值及多个有界批次：
+
+```bash
+cargo test -p rspack_cuda_test --features cuda
+```
+
+显式选择设备测试后，缺少 CUDA 设备会导致测试失败。仅编译验证时可添加 `--no-run`。
+完成 CUDA 绑定与 JS 构建后，可以使用校验模式运行现有集成用例：
+
+```bash
+RSPACK_SPLIT_CHUNKS_BACKEND=cuda RSPACK_SPLIT_CHUNKS_VERIFY=1 \
+  pnpm --dir tests/rspack-test run test \
+  -t 'configCases/split-chunks/(intersections-min-size|intersections-support|dedup-depth|priority-residual-intersections|named-used-exports-dedup)'
+```
+
+校验比较有序的精确候选生成输入对，而不只是数量。
+应用基准还应在采样前比较 CPU 与 CUDA 的输出文件和分块结果。
+正式采样时关闭校验，因为 CPU 影子执行会影响进程总时间。
+
+## 测量解释
+
+每轮 JSONL 记录输入形状、实际后端、回退原因、候选数量、内核启动次数、传输字节数及毫秒计时。
+`wall_ms` 包含打包、后端工作、CPU 精确去重和原生资源清理；
+不包含遥测序列化、CPU 校验，以及后续支持集合和分块处理。
+
+`kernel_ms`、`upload_ms` 和 `download_ms` 使用 CUDA event 计时。
+`allocation_ms` 是主机侧初始化及分配时间。
+`backend_ms` 包含后端调用，与设备阶段计时重叠，不能把这些列直接相加。
+`packing_ms` 与 `cpu_dedup_ms` 用于观察内核加速可能掩盖的主机成本。
+`verification_ms` 单独记录。
+
+CPU 与 CUDA 应使用相同 release 二进制、输入、有效配置、线程数和硬件。
+交替运行顺序，每个后端至少采样三次，并保留原始时间、中位数、平均值及源码和二进制身份。
+同时报告完整构建进程、交集发现和内核的时间。
+多个编译器可能并行执行，因此各轮时间之和不等于构建关键路径的耗时。
+
+每次新进程的生产构建包含 CUDA 上下文初始化及可能的 PTX JIT，
+不代表持久 GPU 上下文或增量 HMR 性能。
+清理输出及工具缓存不会清空操作系统页缓存，报告中需明确这些条件。
+大量重复候选可能让 CPU 重建及去重占主导；小图的卸载成本也可能高于收益。
+设备内存由输入矩阵及固定输出缓冲区决定，不存储全部两两交集，但输入矩阵本身仍可能很大。

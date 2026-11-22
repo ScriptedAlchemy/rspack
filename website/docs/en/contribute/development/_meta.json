@@ -5,6 +5,7 @@
   "testing",
   "debugging",
   "profiling",
+  "cuda-split-chunks",
   "memory",
   "tracing",
   "releasing"
